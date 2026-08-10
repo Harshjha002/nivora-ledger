@@ -35,6 +35,7 @@ transactionRoutes.post(
 );
 
 
+
 /**
  * POST /v1/api/transaction/system/initial-funds
  *
@@ -46,13 +47,12 @@ transactionRoutes.post(
  * 3. Validate request with Zod
  * 4. Create initial-funds transaction
  */
-
 transactionRoutes.post(
     "/system/initial-funds",
+    authMiddleware,
     authSystemUserMiddleware,
     validate(initialFundsSchema),
     transactionController.createInitialFundsTransaction
 );
-
 
 module.exports = transactionRoutes;

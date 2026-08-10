@@ -11,12 +11,20 @@ const objectId = z.string().refine(
 const createTransactionSchema = z.object({
     fromAccount: objectId,
     toAccount: objectId,
-    amount: z.number().positive("Amount must be greater than 0"),
+    amount: z
+    .number()
+    .int("Amount must be an integer in paise")
+    .positive("Amount must be greater than 0")
+    .safe("Amount must be a safe integer in paise"),
 });
 
 const initialFundsSchema = z.object({
     toAccount: objectId,
-    amount: z.number().positive("Amount must be greater than 0"),
+    amount: z
+    .number()
+    .int("Amount must be an integer in paise")
+    .positive("Amount must be greater than 0")
+    .safe("Amount must be a safe integer in paise"),
 });
 
 module.exports = {

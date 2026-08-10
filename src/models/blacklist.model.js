@@ -6,6 +6,7 @@ const tokenBlacklistSchema = new mongoose.Schema(
             type: String,
             required: [true, "Token is required"],
             unique: true,
+            trim: true,
         },
     },
     {
@@ -13,7 +14,7 @@ const tokenBlacklistSchema = new mongoose.Schema(
     }
 );
 
-// Automatically delete blacklist entries after 3 days
+// Automatically delete blacklist entries after 3 days.
 tokenBlacklistSchema.index(
     { createdAt: 1 },
     { expireAfterSeconds: 60 * 60 * 24 * 3 }

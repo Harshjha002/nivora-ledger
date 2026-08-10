@@ -17,7 +17,7 @@ router.post(
     authMiddleware.authMiddleware,
     accountController.createAccountController
 );
-module.exports = router;
+
 /**
  * - GET /v1/api/accounts/
  * - GET all account of loged in user
@@ -29,3 +29,5 @@ router.get("/",authMiddleware.authMiddleware,accountController.getUserAccountCon
  * - GET balance forn  account id
  */
 router.get("/balance/:accountId" , authMiddleware.authMiddleware ,accountController.getAccountBalance)
+
+module.exports = router;

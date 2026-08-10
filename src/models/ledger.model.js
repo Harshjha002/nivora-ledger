@@ -13,7 +13,11 @@ const ledgerSchema = new mongoose.Schema(
         amount: {
             type: Number,
             required: [true, "Amount is required for creating ledger entry"],
-            min: [0.01, "Ledger amount must be greater than 0"],
+            min: [1, "Ledger amount must be at least 1 paise"],
+            validate: {
+                validator: Number.isSafeInteger,
+                message: "Ledger amount must be a safe integer in paise",
+            },
             immutable: true,
         },
 
@@ -40,24 +44,26 @@ const ledgerSchema = new mongoose.Schema(
     }
 );
 
+ledgerSchema.index({ account: 1, createdAt: -1 });
+ledgerSchema.index(
+    { transaction: 1, type: 1 },
+    { unique: true }
+);
+
 const preventLedgerModification = () => {
     throw new Error(
         "Ledger entries are immutable and cannot be modified or deleted"
     );
 };
 
-// Prevent updates
 ledgerSchema.pre("findOneAndUpdate", preventLedgerModification);
 ledgerSchema.pre("updateOne", preventLedgerModification);
 ledgerSchema.pre("updateMany", preventLedgerModification);
 ledgerSchema.pre("findOneAndReplace", preventLedgerModification);
 
-// Prevent deletes
 ledgerSchema.pre("deleteOne", preventLedgerModification);
 ledgerSchema.pre("deleteMany", preventLedgerModification);
 ledgerSchema.pre("findOneAndDelete", preventLedgerModification);
-
-
 
 const Ledger = mongoose.model("Ledger", ledgerSchema);
 

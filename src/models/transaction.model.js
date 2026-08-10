@@ -29,20 +29,37 @@ const transactionSchema = new mongoose.Schema(
         amount: {
             type: Number,
             required: [true, "Amount is required for creating a transaction"],
-            min: [0.01, "Transaction amount must be greater than 0"],
+            min: [1, "Transaction amount must be at least 1 paise"],
+            validate: {
+                validator: Number.isSafeInteger,
+                message:
+                    "Transaction amount must be a safe integer in paise",
+            },
         },
 
         idempotencyKey: {
             type: String,
             required: [true, "Idempotency key is required"],
             unique: true,
-            index: true,
+            trim: true,
+            minlength: [
+                16,
+                "Idempotency key must be at least 16 characters",
+            ],
+            maxlength: [
+                100,
+                "Idempotency key cannot exceed 100 characters",
+            ],
         },
     },
     {
         timestamps: true,
     }
 );
+
+transactionSchema.index({ fromAccount: 1, createdAt: -1 });
+transactionSchema.index({ toAccount: 1, createdAt: -1 });
+transactionSchema.index({ status: 1, createdAt: -1 });
 
 const Transaction = mongoose.model("Transaction", transactionSchema);
 

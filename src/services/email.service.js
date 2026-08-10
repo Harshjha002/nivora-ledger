@@ -1,4 +1,3 @@
-require("dotenv").config();
 
 const nodemailer = require("nodemailer");
 
@@ -16,7 +15,7 @@ const transporter = nodemailer.createTransport({
 // Verify email configuration
 transporter.verify((error) => {
   if (error) {
-    console.error("Error connecting to email server:", error);
+    console.error("Error sending email:", error.message);
   } else {
     console.log("Email server is ready to send messages");
   }
@@ -37,7 +36,7 @@ const sendEmail = async (to, subject, text, html) => {
 
     return info;
   } catch (error) {
-    console.error("Error sending email:", error);
+    console.error("Error sending email:", error.message);
     throw error;
   }
 };
@@ -88,14 +87,14 @@ const sendTransactionEmail = async (
     toAccount
 ) => {
     const subject = "Transaction Successful - Nivora Ledger";
-
+const rupees = (amount / 100).toFixed(2);
     const text = `
 Hello ${name},
 
 Your transaction has been completed successfully.
 
 Transaction Details:
-Amount: ₹${amount}
+Amount: ₹${rupees}
 To Account: ${toAccount}
 Status: COMPLETED
 
@@ -124,7 +123,7 @@ Nivora Ledger
 
     <h3>Transaction Details</h3>
 
-    <p><strong>Amount:</strong> ₹${amount}</p>
+    <p><strong>Amount:</strong> ₹${rupees}</p>
     <p><strong>To Account:</strong> ${toAccount}</p>
     <p><strong>Status:</strong> COMPLETED</p>
 
@@ -156,6 +155,7 @@ const sendTransactionFailedEmail = async (
     toAccount
 ) => {
     const subject = "Transaction Failed - Nivora Ledger";
+    const rupees = (amount / 100).toFixed(2);
 
     const text = `
 Hello ${name},
@@ -163,7 +163,7 @@ Hello ${name},
 Unfortunately, your transaction could not be completed.
 
 Transaction Details:
-Amount: ₹${amount}
+Amount: ₹${rupees}
 To Account: ${toAccount}
 Status: FAILED
 
@@ -194,7 +194,7 @@ Nivora Ledger
 
     <h3>Transaction Details</h3>
 
-    <p><strong>Amount:</strong> ₹${amount}</p>
+    <p><strong>Amount:</strong> ₹${rupees}</p>
     <p><strong>To Account:</strong> ${toAccount}</p>
     <p><strong>Status:</strong> FAILED</p>
 

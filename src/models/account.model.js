@@ -23,6 +23,18 @@ const accountSchema = new mongoose.Schema(
             type: String,
             required: [true, "Currency is required for creating an account"],
             default: "INR",
+            uppercase: true,
+            trim: true,
+            match: [
+                /^[A-Z]{3}$/,
+                "Currency must be a valid 3-letter currency code",
+            ],
+        },
+
+        transferVersion: {
+            type: Number,
+            default: 0,
+            select: false,
         },
     },
     {
@@ -32,8 +44,8 @@ const accountSchema = new mongoose.Schema(
 
 accountSchema.index({ user: 1, status: 1 });
 
-accountSchema.methods.getBalance = async function () {
-    const balanceData = await Ledger.aggregate([
+accountSchema.methods.getBalance = async function (session) {
+    const aggregate = Ledger.aggregate([
         {
             $match: {
                 account: this._id,
@@ -73,6 +85,12 @@ accountSchema.methods.getBalance = async function () {
             },
         },
     ]);
+
+    if (session) {
+        aggregate.session(session);
+    }
+
+    const balanceData = await aggregate;
 
     if (balanceData.length === 0) {
         return 0;

@@ -11,7 +11,7 @@ const userSchema = new mongoose.Schema(
             unique: true,
             match: [
                 /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                "Please enter a valid email address"
+                "Please enter a valid email address",
             ],
         },
 
@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema(
             maxlength: [50, "Name cannot exceed 50 characters"],
             match: [
                 /^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/,
-                "Please enter a valid name"
+                "Please enter a valid name",
             ],
         },
 
@@ -31,14 +31,16 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: [true, "Password is required"],
             minlength: [8, "Password must be at least 8 characters"],
+            maxlength: [100, "Password cannot exceed 100 characters"],
             select: false,
         },
-        systemUser:{
-            type:Boolean,
-            default:false,
-            immutable:true,
-            select:false
-        }
+
+        systemUser: {
+            type: Boolean,
+            default: false,
+            immutable: true,
+            select: false,
+        },
     },
     {
         timestamps: true,
@@ -50,9 +52,8 @@ userSchema.pre("save", async function () {
         return;
     }
 
-    const hash = await bcrypt.hash(this.password, 10);
-    this.password = hash;
-});;
+    this.password = await bcrypt.hash(this.password, 12);
+});
 
 userSchema.methods.comparePassword = async function (password) {
     return bcrypt.compare(password, this.password);
