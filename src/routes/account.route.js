@@ -18,3 +18,14 @@ router.post(
     accountController.createAccountController
 );
 module.exports = router;
+/**
+ * - GET /v1/api/accounts/
+ * - GET all account of loged in user
+ */
+router.get("/",authMiddleware.authMiddleware,accountController.getUserAccountController)
+
+/**
+ * - GET /v1/api/accounts/balance/:accountId
+ * - GET balance forn  account id
+ */
+router.get("/balance/:accountId" , authMiddleware.authMiddleware ,accountController.getAccountBalance)
