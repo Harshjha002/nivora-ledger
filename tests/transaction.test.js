@@ -281,3 +281,107 @@ describe("POST /v1/api/transaction (transfer)", () => {
         expect(finalBalance.body.balance).toBeGreaterThanOrEqual(0);
     });
 });
+
+describe("GET /v1/api/transaction (transaction history)", () => {
+   it("should return the logged-in user's transaction history", async () => {
+    const sender = await createFundedAccount(10000);
+    const receiver = await createFundedAccount(0);
+
+    await sender.userAgent
+        .post("/v1/api/transaction")
+        .set("Idempotency-Key", idKey())
+        .send({
+            fromAccount: sender.userAccountId,
+            toAccount: receiver.userAccountId,
+            amount: 1000,
+        })
+        .expect(201);
+
+    const response = await sender.userAgent
+        .get("/v1/api/transaction")
+        .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.transactions).toHaveLength(2);
+
+    expect(response.body.transactions[0]).toMatchObject({
+        fromAccount: sender.userAccountId,
+        toAccount: receiver.userAccountId,
+        amount: 1000,
+        direction: "DEBIT",
+        status: "COMPLETED",
+    });
+});
+
+it("should paginate transaction history", async () => {
+    const sender = await createFundedAccount(10000);
+    const receiver = await createFundedAccount(0);
+
+    await sender.userAgent
+        .post("/v1/api/transaction")
+        .set("Idempotency-Key", idKey())
+        .send({
+            fromAccount: sender.userAccountId,
+            toAccount: receiver.userAccountId,
+            amount: 1000,
+        })
+        .expect(201);
+
+    await sender.userAgent
+        .post("/v1/api/transaction")
+        .set("Idempotency-Key", idKey())
+        .send({
+            fromAccount: sender.userAccountId,
+            toAccount: receiver.userAccountId,
+            amount: 2000,
+        })
+        .expect(201);
+
+    const response = await sender.userAgent
+        .get("/v1/api/transaction?page=1&limit=2")
+        .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.transactions).toHaveLength(2);
+
+    expect(response.body.pagination).toMatchObject({
+        page: 1,
+        limit: 2,
+        total: 3,
+        totalPages: 2,
+    });
+});
+
+it("should not return transactions unrelated to the logged-in user", async () => {
+    const userA = await createFundedAccount(10000);
+    const userB = await createFundedAccount(10000);
+    const userC = await createFundedAccount(10000);
+
+    // A → C
+    await userA.userAgent
+        .post("/v1/api/transaction")
+        .set("Idempotency-Key", idKey())
+        .send({
+            fromAccount: userA.userAccountId,
+            toAccount: userC.userAccountId,
+            amount: 1000,
+        })
+        .expect(201);
+
+    const response = await userB.userAgent
+        .get("/v1/api/transaction")
+        .expect(200);
+
+    expect(response.body.success).toBe(true);
+
+    expect(
+        response.body.transactions.some(
+            (transaction) =>
+                transaction.fromAccount === userA.userAccountId ||
+                transaction.toAccount === userA.userAccountId ||
+                transaction.fromAccount === userC.userAccountId ||
+                transaction.toAccount === userC.userAccountId
+        )
+    ).toBe(false);
+});
+});
