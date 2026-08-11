@@ -27,14 +27,15 @@ const transactionRoutes = Router();
  * 3. Create transaction
  */
 
+
+transactionRoutes.get("/", authMiddleware, transactionController.getTransactionHistory);
+
 transactionRoutes.post(
     "/",
     authMiddleware,
     validate(createTransactionSchema),
     transactionController.createTransaction
 );
-
-
 
 /**
  * POST /v1/api/transaction/system/initial-funds
@@ -54,5 +55,8 @@ transactionRoutes.post(
     validate(initialFundsSchema),
     transactionController.createInitialFundsTransaction
 );
+
+
+
 
 module.exports = transactionRoutes;
