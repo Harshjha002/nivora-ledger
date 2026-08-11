@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+ "scripts": {
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch --runInBand",
+    "test:coverage": "jest --coverage --runInBand",
     "dev": "nodemon server.js",
     "start": "node server.js"
-  },
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -23,6 +25,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "jest": "^30.4.2",
+    "mongodb-memory-server": "^11.2.0",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.2.2"
   }
 }
