@@ -87,8 +87,9 @@ Base URL: `/v1/api`
 
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| POST | `/transaction` | Transfer funds between two accounts | Yes + `Idempotency-Key` header |
-| POST | `/transaction/system/initial-funds` | Seed an account with funds from the system account | Yes (system user) + `Idempotency-Key` header |
+| GET | `/transaction` | Paginated transaction history (sent + received), optional `?accountId=` filter | Yes |
+| POST | `/transaction` | Transfer funds between two accounts | Yes + `Idempotency-Key` header, rate-limited |
+| POST | `/transaction/system/initial-funds` | Seed an account with funds from the system account | Yes (system user) + `Idempotency-Key` header, rate-limited |
 
 ### Health
 
@@ -123,15 +124,35 @@ npm start                # production
 | `MONGO_URI` | MongoDB connection string |
 | `JWT_SECRET` | Secret used to sign JWTs |
 | `EMAIL_USER` | Gmail address used to send transactional emails |
-| `CLIENT_ID` | 	Google OAuth2 client ID — used only to authorize Gmail API access for sending emails|
+| `CLIENT_ID` | Google OAuth2 client ID — used only to authorize Gmail API access for sending emails (not user login) |
 | `CLIENT_SECRET` | Google OAuth2 client secret — same purpose |
 | `REFRESH_TOKEN` | Long-lived token so the app can send email without re-authenticating each time |
+| `LOGIN_RATE_LIMIT_MAX` | Max login attempts per email within the window (default: 5) |
+| `LOGIN_RATE_LIMIT_WINDOW_MS` | Login rate-limit window in ms (default: 15 minutes) |
+| `TRANSACTION_RATE_LIMIT_MAX` | Max transfer attempts per user within the window (default: 30) |
+| `TRANSACTION_RATE_LIMIT_WINDOW_MS` | Transfer rate-limit window in ms (default: 1 minute) |
 
 Once running, confirm it's alive:
 
 ```bash
 curl http://localhost:3000/health
 ```
+
+## Testing
+
+29 Jest/Supertest tests covering auth, account isolation, and transfer correctness — run against a real single-node MongoDB **replica set** (via `mongodb-memory-server`), not a standalone instance, so transactional code paths are actually exercised, not mocked around.
+
+```bash
+npm install --save-dev jest supertest mongodb-memory-server
+npm test
+```
+
+Notable cases:
+- **Concurrency / no-double-spend proof** — fires 5 simultaneous full-balance transfer attempts from one account and asserts exactly one succeeds and the balance never goes negative, proving the `transferVersion` locking actually works under a race, not just on paper.
+- **Idempotency proof** — retries a transfer with the same `Idempotency-Key` and asserts the balance is unaffected by the retry.
+- **Account isolation** — one user can never read another user's account balance or transaction history (404/403, not a data leak).
+- **Rate limiting** — both the login limiter (keyed per email) and the transfer limiter (keyed per user) are asserted to actually return `429` once exceeded, not just configured and assumed to work.
+- **Ledger immutability** — direct mutation of a ledger entry is asserted to throw at the schema level.
 
 ## Project structure
 
@@ -157,13 +178,22 @@ server.js                       # Entry point
 
 ## Roadmap
 
-- [ ] Automated tests (Jest/Supertest) covering the transfer flow, especially concurrency and idempotency edge cases
-- [ ] OpenAPI/Swagger documentation
+**Completed**
+- [x] Automated tests (Jest/Supertest) covering the transfer flow, concurrency, and idempotency edge cases — 29 tests, run against a real Mongo replica set
+- [x] Paginated transaction history endpoint
+- [x] Rate limiting on auth and transfer endpoints (env-configurable, per-email and per-user keyed)
+
+**Planned**
+- [ ] Redis-backed rate limiting + distributed idempotency locking
 - [ ] Dockerfile + docker-compose for one-command local setup
-- [ ] Rate limiting on auth and transfer endpoints
-- [ ] Structured logging (Pino/Winston)
 - [ ] CI pipeline (lint + test on every PR)
+- [ ] Deployed on AWS (ECS/EC2) with MongoDB Atlas
+- [ ] Structured logging (Pino/Winston)
+- [ ] Prometheus metrics + Grafana dashboard
+- [ ] OpenAPI/Swagger documentation
 - [ ] Transaction reversal endpoint (offsetting ledger entries)
+- [ ] (Stretch) Kafka event stream for completed transactions
+- [ ] (Stretch) Real-time balance updates via WebSockets
 
 ## License
 
