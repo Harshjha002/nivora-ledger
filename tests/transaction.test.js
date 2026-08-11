@@ -280,6 +280,37 @@ describe("POST /v1/api/transaction (transfer)", () => {
         expect(finalBalance.body.balance).toBe(0);
         expect(finalBalance.body.balance).toBeGreaterThanOrEqual(0);
     });
+
+    it("rate limits repeated transaction attempts", async () => {
+    const sender = await createFundedAccount(100000);
+    const receiver = await createFundedAccount(0);
+
+    // 30 allowed requests
+    for (let i = 0; i < 30; i++) {
+        const response = await sender.userAgent
+            .post("/v1/api/transaction")
+            .set("Idempotency-Key", idKey())
+            .send({
+                fromAccount: sender.userAccountId,
+                toAccount: receiver.userAccountId,
+                amount: 1,
+            });
+
+        expect(response.status).toBe(201);
+    }
+
+    // 31st request should be rate limited
+    const response = await sender.userAgent
+        .post("/v1/api/transaction")
+        .set("Idempotency-Key", idKey())
+        .send({
+            fromAccount: sender.userAccountId,
+            toAccount: receiver.userAccountId,
+            amount: 1,
+        });
+
+    expect(response.status).toBe(429);
+});
 });
 
 describe("GET /v1/api/transaction (transaction history)", () => {

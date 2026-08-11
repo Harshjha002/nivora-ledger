@@ -13,6 +13,10 @@ const {
     initialFundsSchema,
 } = require("../validation/transaction.validation");
 
+const {
+    transactionRateLimiter,
+} = require("../middleware/rate-limit.middleware");
+
 const transactionRoutes = Router();
 
 
@@ -33,6 +37,7 @@ transactionRoutes.get("/", authMiddleware, transactionController.getTransactionH
 transactionRoutes.post(
     "/",
     authMiddleware,
+    transactionRateLimiter,
     validate(createTransactionSchema),
     transactionController.createTransaction
 );

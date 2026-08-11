@@ -3,6 +3,9 @@ const authController = require("../controller/auth.controller");
 const validate = require("../middleware/validate.middleware");
 const { registerSchema ,loginSchema } = require("../validation/auth.validation");
 const authMiddleware = require("../middleware/auth.middleware");
+const {
+    loginRateLimiter,
+} = require("../middleware/rate-limit.middleware");
 
 const router = express.Router();
 
@@ -15,9 +18,10 @@ router.post(
 
 /* POST /v1/api/auth/login */
 router.post(
-  "/login",
-  validate(loginSchema),
-  authController.userLoginController,
+    "/login",
+    loginRateLimiter,
+    validate(loginSchema),
+    authController.userLoginController,
 );
 
 
