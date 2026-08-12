@@ -1,14 +1,16 @@
 const User = require("../models/user.model");
 const emailService = require("./email.service");
 const TokenBlacklist = require("../models/blacklist.model");
+const ApiError = require("../utils/ApiError");
 
 const registerUser = async ({ email, name, password }) => {
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
-        const error = new Error("User already exists with this email");
-        error.statusCode = 409;
-        throw error;
+        throw new ApiError(
+            409,
+            "User already exists with this email"
+        );
     }
 
     const user = await User.create({
@@ -36,17 +38,19 @@ const loginUser = async ({ email, password }) => {
     const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
-        const error = new Error("Email or password is invalid");
-        error.statusCode = 401;
-        throw error;
+        throw new ApiError(
+            401,
+            "Email or password is invalid"
+        );
     }
 
     const isValidPassword = await user.comparePassword(password);
 
     if (!isValidPassword) {
-        const error = new Error("Email or password is invalid");
-        error.statusCode = 401;
-        throw error;
+        throw new ApiError(
+            401,
+            "Email or password is invalid"
+        );
     }
 
     return user;

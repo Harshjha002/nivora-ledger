@@ -1,6 +1,6 @@
 const accountService = require("../services/account.service");
 
-const createAccountController = async (req, res) => {
+const createAccountController = async (req, res, next) => {
   try {
     const account = await accountService.createAccount(req.user._id);
 
@@ -9,15 +9,11 @@ const createAccountController = async (req, res) => {
       account,
     });
   } catch (error) {
-    console.error("Create account error:", error);
-
-    return res.status(error.statusCode || 500).json({
-      message: error.statusCode ? error.message : "Failed to create account",
-    });
+    next(error);
   }
 };
 
-const getUserAccountController = async (req, res) => {
+const getUserAccountController = async (req, res, next) => {
   try {
     const accounts = await accountService.getUserAccounts(req.user._id);
 
@@ -25,29 +21,20 @@ const getUserAccountController = async (req, res) => {
       accounts,
     });
   } catch (error) {
-    console.error("Get user accounts error:", error);
-
-    return res.status(500).json({
-      message: "Failed to fetch accounts",
-    });
+    next(error);
   }
 };
 
-const getAccountBalance = async (req, res) => {
+const getAccountBalance = async (req, res, next) => {
   try {
     const result = await accountService.getAccountBalance(
       req.user._id,
-      req.params.accountId,
+      req.params.accountId
     );
+
     return res.status(200).json(result);
   } catch (error) {
-    console.error("Get account balance error:", error);
-
-    return res.status(error.statusCode || 500).json({
-      message: error.statusCode
-        ? error.message
-        : "Failed to fetch account balance",
-    });
+    next(error);
   }
 };
 
