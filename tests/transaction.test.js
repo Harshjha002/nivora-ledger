@@ -244,11 +244,27 @@ describe("POST /v1/api/transaction (transfer)", () => {
             startingBalance
         );
 
+        // These 5 receivers only need to exist as valid transfer targets —
+        // the test doesn't log in as them or assert anything about their
+        // own state. Creating them directly (like the system user already
+        // does) keeps this test's setup from being bottlenecked by the
+        // register rate limiter, which is a real, correctly-enforced
+        // limit unrelated to what this test is actually proving.
         const receivers = await Promise.all(
-            Array.from({ length: 5 }).map(async () => {
-                const agent = await registerAndLogin();
-                const res = await agent.post("/v1/api/account");
-                return res.body.account._id;
+            Array.from({ length: 5 }).map(async (_, i) => {
+                const receiverUser = await User.create({
+                    name: "Concurrency Receiver",
+                    email: `concurrency-receiver-${i}-${crypto
+                        .randomBytes(4)
+                        .toString("hex")}@example.com`,
+                    password: "supersecret123",
+                });
+
+                const receiverAccount = await Account.create({
+                    user: receiverUser._id,
+                });
+
+                return receiverAccount._id.toString();
             })
         );
 

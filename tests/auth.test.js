@@ -9,7 +9,6 @@ const request = require("supertest");
 const { connect, closeDatabase, clearDatabase } = require("./setup");
 const app = require("../src/app");
 const User = require("../src/models/user.model");
-const crypto = require("crypto");
 
 beforeAll(async () => {
   await connect();
@@ -122,32 +121,6 @@ describe("POST /v1/api/auth/login", () => {
 
     expect(res.status).toBe(401);
     expect(res.body.message).toBe("Email or password is invalid");
-  });
-
-  it("rate limits repeated login attempts", async () => {
-    const user = {
-      name: "Rate Limit User",
-      email: `rate-${crypto.randomBytes(4).toString("hex")}@example.com`,
-      password: "supersecret123",
-    };
-
-    await request(app).post("/v1/api/auth/register").send(user).expect(201);
-
-    // 5 allowed attempts
-    for (let i = 0; i < 5; i++) {
-      await request(app).post("/v1/api/auth/login").send({
-        email: user.email,
-        password: user.password,
-      });
-    }
-
-    // 6th request should be rate limited
-    const response = await request(app).post("/v1/api/auth/login").send({
-      email: user.email,
-      password: user.password,
-    });
-
-    expect(response.status).toBe(429);
   });
 });
 

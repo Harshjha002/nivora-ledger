@@ -1,5 +1,6 @@
 const { MongoMemoryReplSet } = require("mongodb-memory-server");
 const mongoose = require("mongoose");
+const { resetRateLimiters } = require("../src/middleware/rate-limit.middleware");
 
 let replSet;
 
@@ -31,6 +32,7 @@ const clearDatabase = async () => {
     for (const key in collections) {
         await collections[key].deleteMany({});
     }
+    await resetRateLimiters();
 };
 
 module.exports = { connect, closeDatabase, clearDatabase };

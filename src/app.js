@@ -1,5 +1,7 @@
 const express = require("express");
 const cookieParser = require("cookie-parser");
+const cors = require("cors");
+const helmet = require("helmet");
 
 const authRouter = require("./routes/auth.route");
 const accountRouter = require("./routes/account.route");
@@ -10,6 +12,8 @@ const app = express();
 
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
+app.use(cors());
+app.use(helmet());
 
 app.get("/health", (req, res) => {
   return res.status(200).json({
