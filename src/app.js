@@ -4,6 +4,8 @@ const cors = require("cors");
 const helmet = require("helmet");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
+const pinoHttp = require("pino-http");
+const logger = require("./config/logger");
 
 const authRouter = require("./routes/auth.route");
 const accountRouter = require("./routes/account.route");
@@ -11,6 +13,28 @@ const transactionRoutes = require("./routes/transaction.route");
 const errorMiddleware = require("./middleware/error.middleware");
 
 const app = express();
+app.use(
+    pinoHttp({
+        logger,
+
+        serializers: {
+            req(req) {
+                return {
+                    id: req.id,
+                    method: req.method,
+                    url: req.url,
+                    remoteAddress: req.remoteAddress,
+                };
+            },
+
+            res(res) {
+                return {
+                    statusCode: res.statusCode,
+                };
+            },
+        },
+    })
+);
 
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
