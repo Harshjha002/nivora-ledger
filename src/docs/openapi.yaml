@@ -1,0 +1,706 @@
+openapi: 3.0.3
+
+info:
+  title: Nivora Ledger API
+  version: 1.0.0
+  description: REST API for the Nivora Ledger application
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+
+  - name: Accounts
+    description: User account management
+
+  - name: Transactions
+    description: Ledger transactions
+
+paths:
+
+  # ============================================================
+  # AUTHENTICATION
+  # ============================================================
+
+  /v1/api/auth/register:
+    post:
+      summary: Register a new user
+      description: Creates a new user account and establishes an authenticated session.
+      tags:
+        - Authentication
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              name: Ada Lovelace
+              email: ada@example.com
+              password: supersecret123
+
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+
+        "400":
+          description: Invalid registration data
+
+        "409":
+          description: Email is already registered
+
+        "429":
+          description: Too many registration attempts
+
+        "500":
+          description: Internal server error
+
+  /v1/api/auth/login:
+    post:
+      summary: Login a user
+      description: Authenticates a user and establishes an HTTP-only authentication cookie.
+      tags:
+        - Authentication
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              email: ada@example.com
+              password: supersecret123
+
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+
+        "400":
+          description: Invalid login data
+
+        "401":
+          description: Email or password is invalid
+
+        "429":
+          description: Too many login attempts
+
+        "500":
+          description: Internal server error
+
+  /v1/api/auth/logout:
+    post:
+      summary: Logout the authenticated user
+      description: Invalidates the current authentication token and clears the authentication cookie.
+      tags:
+        - Authentication
+      security:
+        - cookieAuth: []
+
+      responses:
+        "200":
+          description: User logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+        "401":
+          description: Authentication required
+
+        "500":
+          description: Internal server error
+
+  # ============================================================
+  # ACCOUNTS
+  # ============================================================
+
+  /v1/api/account:
+    post:
+      summary: Create a new account
+      description: Creates a new account for the authenticated user.
+      tags:
+        - Accounts
+      security:
+        - cookieAuth: []
+
+      responses:
+        "201":
+          description: Account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResponse"
+
+        "401":
+          description: Authentication required
+
+        "500":
+          description: Internal server error
+
+    get:
+      summary: Get user's accounts
+      description: Returns all accounts belonging to the authenticated user.
+      tags:
+        - Accounts
+      security:
+        - cookieAuth: []
+
+      responses:
+        "200":
+          description: Accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Account"
+
+        "401":
+          description: Authentication required
+
+        "500":
+          description: Internal server error
+
+  /v1/api/account/balance/{accountId}:
+    get:
+      summary: Get account balance
+      description: Returns the balance for an account belonging to the authenticated user.
+      tags:
+        - Accounts
+      security:
+        - cookieAuth: []
+
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          description: MongoDB ObjectId of the account
+          schema:
+            type: string
+            example: 64f123456789abcdef123456
+
+      responses:
+        "200":
+          description: Account balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceResponse"
+
+        "400":
+          description: Invalid account ID
+
+        "401":
+          description: Authentication required
+
+        "404":
+          description: Account not found
+
+        "500":
+          description: Internal server error
+
+  # ============================================================
+  # TRANSACTIONS
+  # ============================================================
+
+  /v1/api/transaction:
+    get:
+      summary: Get transaction history
+      description: Returns paginated transaction history for the authenticated user's accounts.
+      tags:
+        - Transactions
+      security:
+        - cookieAuth: []
+
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: Page number
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+            example: 1
+
+        - name: limit
+          in: query
+          required: false
+          description: Number of transactions per page. Maximum 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+            example: 20
+
+      responses:
+        "200":
+          description: Transaction history retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionHistoryResponse"
+
+        "401":
+          description: Authentication required
+
+        "500":
+          description: Internal server error
+
+    post:
+      summary: Create a transaction
+      description: Transfers funds from the authenticated user's account to another active account.
+      tags:
+        - Transactions
+      security:
+        - cookieAuth: []
+
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique key used to safely retry the same transaction. Must be between 16 and 100 characters.
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 100
+          example: txn_8f7a9b2c4d6e1a3f
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransactionRequest"
+            example:
+              fromAccount: 64f987654321abcdef987654
+              toAccount: 64fabcd123456789abcdef12
+              amount: 50000
+
+      responses:
+        "201":
+          description: Transaction completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionResponse"
+
+        "200":
+          description: Transaction was already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionResponse"
+
+        "400":
+          description: Invalid transaction, insufficient balance, inactive account, or previous transaction failed/reversed
+
+        "401":
+          description: Authentication required
+
+        "403":
+          description: User is not authorized to use the sender account
+
+        "404":
+          description: Sender or receiver account not found
+
+        "409":
+          description: Transaction is still being processed or duplicate idempotency key
+
+        "429":
+          description: Too many transaction attempts
+
+        "500":
+          description: Internal server error
+
+  /v1/api/transaction/system/initial-funds:
+    post:
+      summary: Add initial funds to an account
+      description: Creates an initial-funds transaction from the authenticated system user account to an active receiver account.
+      tags:
+        - Transactions
+      security:
+        - cookieAuth: []
+
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique key used to safely retry the same initial-funds transaction. Must be between 16 and 100 characters.
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 100
+          example: initial_funds_8f7a9b2c4d6e
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InitialFundsRequest"
+            example:
+              toAccount: 64fabcd123456789abcdef12
+              amount: 100000
+
+      responses:
+        "201":
+          description: Initial funds added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionResponse"
+
+        "200":
+          description: Initial funds transaction was already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionResponse"
+
+        "400":
+          description: Invalid idempotency key, inactive receiver account, system account cannot fund itself, or previous transaction failed/reversed
+
+        "401":
+          description: Authentication required
+
+        "403":
+          description: System user access required
+
+        "404":
+          description: System account or receiver account not found
+
+        "409":
+          description: Transaction is still being processed or duplicate idempotency key
+
+        "500":
+          description: Internal server error
+
+# ============================================================
+# COMPONENTS
+# ============================================================
+
+components:
+
+  securitySchemes:
+
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+
+  schemas:
+
+    # ========================================================
+    # AUTH SCHEMAS
+    # ========================================================
+
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: Ada Lovelace
+
+        email:
+          type: string
+          format: email
+          example: ada@example.com
+
+        password:
+          type: string
+          minLength: 8
+          maxLength: 100
+          format: password
+          example: supersecret123
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: ada@example.com
+
+        password:
+          type: string
+          minLength: 8
+          maxLength: 100
+          format: password
+          example: supersecret123
+
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 64f123456789abcdef123456
+
+        email:
+          type: string
+          format: email
+          example: ada@example.com
+
+        name:
+          type: string
+          example: Ada Lovelace
+
+    UserResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: User logged out successfully
+
+    # ========================================================
+    # ACCOUNT SCHEMAS
+    # ========================================================
+
+    Account:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 64f123456789abcdef123456
+
+        user:
+          type: string
+          example: 64f987654321abcdef987654
+
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - FROZEN
+            - CLOSED
+          example: ACTIVE
+
+        currency:
+          type: string
+          example: INR
+
+        createdAt:
+          type: string
+          format: date-time
+
+        updatedAt:
+          type: string
+          format: date-time
+
+    AccountResponse:
+      type: object
+      properties:
+        account:
+          $ref: "#/components/schemas/Account"
+
+    BalanceResponse:
+      type: object
+      properties:
+        balance:
+          type: number
+          description: Account balance in paise
+          example: 5000
+
+    # ========================================================
+    # TRANSACTION SCHEMAS
+    # ========================================================
+
+    CreateTransactionRequest:
+      type: object
+      required:
+        - fromAccount
+        - toAccount
+        - amount
+      properties:
+        fromAccount:
+          type: string
+          description: MongoDB ObjectId of the sender account
+          example: 64f987654321abcdef987654
+
+        toAccount:
+          type: string
+          description: MongoDB ObjectId of the receiver account
+          example: 64fabcd123456789abcdef12
+
+        amount:
+          type: integer
+          minimum: 1
+          description: Transaction amount in paise
+          example: 50000
+
+    InitialFundsRequest:
+      type: object
+      required:
+        - toAccount
+        - amount
+      properties:
+        toAccount:
+          type: string
+          description: MongoDB ObjectId of the account receiving the initial funds
+          example: 64fabcd123456789abcdef12
+
+        amount:
+          type: integer
+          minimum: 1
+          description: Initial funds amount in paise
+          example: 100000
+
+    Transaction:
+      type: object
+      properties:
+        _id:
+          type: string
+          example: 64f123456789abcdef123456
+
+        fromAccount:
+          type: string
+          example: 64f987654321abcdef987654
+
+        toAccount:
+          type: string
+          example: 64fabcd123456789abcdef12
+
+        amount:
+          type: integer
+          description: Transaction amount in paise
+          example: 50000
+
+        status:
+          type: string
+          enum:
+            - PENDING
+            - COMPLETED
+            - FAILED
+            - REVERSED
+          example: COMPLETED
+
+        idempotencyKey:
+          type: string
+          minLength: 16
+          maxLength: 100
+          example: txn_8f7a9b2c4d6e1a3f
+
+        createdAt:
+          type: string
+          format: date-time
+
+        updatedAt:
+          type: string
+          format: date-time
+
+    TransactionResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Transaction completed successfully
+
+        transaction:
+          $ref: "#/components/schemas/Transaction"
+
+    TransactionHistory:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          example: 64f123456789abcdef123456
+
+        fromAccount:
+          type: string
+          example: 64f987654321abcdef987654
+
+        toAccount:
+          type: string
+          example: 64fabcd123456789abcdef12
+
+        amount:
+          type: integer
+          description: Transaction amount in paise
+          example: 50000
+
+        direction:
+          type: string
+          enum:
+            - CREDIT
+            - DEBIT
+          example: DEBIT
+
+        status:
+          type: string
+          enum:
+            - PENDING
+            - COMPLETED
+            - FAILED
+            - REVERSED
+          example: COMPLETED
+
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-08-14T10:30:00.000Z"
+
+    TransactionPagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+
+        limit:
+          type: integer
+          example: 20
+
+        total:
+          type: integer
+          example: 45
+
+        totalPages:
+          type: integer
+          example: 3
+
+    TransactionHistoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransactionHistory"
+
+        pagination:
+          $ref: "#/components/schemas/TransactionPagination"
