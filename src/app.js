@@ -12,8 +12,14 @@ const app = express();
 
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
-app.use(cors());
 app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  }),
+);
+
 
 app.get("/health", (req, res) => {
   return res.status(200).json({

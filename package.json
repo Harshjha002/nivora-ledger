@@ -1,7 +1,17 @@
 {
   "name": "nivora-ledger",
   "version": "1.0.0",
-  "description": "",
+  "description": "Production-oriented REST API for a financial ledger system",
+  "keywords": [
+    "nodejs",
+    "express",
+    "mongodb",
+    "mongoose",
+    "rest-api",
+    "ledger",
+    "fintech"
+  ],
+  "author": "Harsh Jha",
   "main": "index.js",
   "scripts": {
     "test": "jest --runInBand",
@@ -10,8 +20,6 @@
     "dev": "nodemon server.js",
     "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
