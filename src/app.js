@@ -6,6 +6,7 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 const pinoHttp = require("pino-http");
 const logger = require("./config/logger");
+const mongoose = require("mongoose");
 
 const authRouter = require("./routes/auth.route");
 const accountRouter = require("./routes/account.route");
@@ -45,6 +46,30 @@ app.use(
     credentials: true,
   }),
 );
+
+app.get("/health/live", (req, res) => {
+    return res.status(200).json({
+        status: "success",
+        message: "Nivora Ledger API is alive",
+    });
+});
+
+app.get("/health/ready", (req, res) => {
+    const isDatabaseReady =
+        mongoose.connection.readyState === 1;
+
+    if (!isDatabaseReady) {
+        return res.status(503).json({
+            status: "failed",
+            message: "Nivora Ledger API is not ready",
+        });
+    }
+
+    return res.status(200).json({
+        status: "success",
+        message: "Nivora Ledger API is ready",
+    });
+});
 
 app.get("/health", (req, res) => {
   return res.status(200).json({

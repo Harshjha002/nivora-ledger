@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-async function connectToDB() {
+const connectToDB = async () => {
     try {
         await mongoose.connect(process.env.MONGO_URI, {
             serverSelectionTimeoutMS: 10000,
@@ -9,8 +9,21 @@ async function connectToDB() {
         console.log("Database connected successfully");
     } catch (error) {
         console.error("Database connection failed:", error.message);
-        process.exit(1);
+        throw error;
     }
-}
+};
 
-module.exports = connectToDB;
+const disconnectFromDB = async () => {
+    try {
+        await mongoose.disconnect();
+        console.log("Database disconnected successfully");
+    } catch (error) {
+        console.error("Database disconnection failed:", error.message);
+        throw error;
+    }
+};
+
+module.exports = {
+    connectToDB,
+    disconnectFromDB,
+};
