@@ -1,3 +1,10 @@
+jest.mock("../src/services/email.service", () => ({
+  sendRegistrationEmail: jest.fn().mockResolvedValue(true),
+  sendTransactionEmail: jest.fn().mockResolvedValue(true),
+  sendTransactionFailedEmail: jest.fn().mockResolvedValue(true),
+  sendEmail: jest.fn().mockResolvedValue(true),
+}));
+
 const request = require("supertest");
 const app = require("../src/app");
 const {

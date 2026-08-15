@@ -12,14 +12,20 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Verify email configuration
-transporter.verify((error) => {
-  if (error) {
-    logger.error({ err: error }, "Email transporter verification failed");
-  } else {
-    logger.info("Email server is ready to send messages");
-  }
+// Verify email configuration — skipped in tests so we never hit Gmail's
+// real OAuth2 endpoint just from importing this module.
+if (process.env.NODE_ENV !== "test") {
+  transporter.verify((error) => {
+    if (error) {
+        logger.error(
+            { err: error },
+            "Email transporter verification failed"
+        );
+    } else {
+        logger.info("Email server is ready to send messages");
+    }
 });
+}
 
 // Generic email function
 const sendEmail = async (to, subject, text, html) => {
@@ -79,7 +85,6 @@ Nivora Ledger
   return sendEmail(userEmail, subject, text, html);
 };
 
-
 const sendTransactionEmail = async (
     userEmail,
     name,
@@ -87,7 +92,7 @@ const sendTransactionEmail = async (
     toAccount
 ) => {
     const subject = "Transaction Successful - Nivora Ledger";
-const rupees = (amount / 100).toFixed(2);
+    const rupees = (amount / 100).toFixed(2);
     const text = `
 Hello ${name},
 
