@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const logger = require("./logger");
 
 const connectToDB = async () => {
     try {
@@ -6,9 +7,9 @@ const connectToDB = async () => {
             serverSelectionTimeoutMS: 10000,
         });
 
-        console.log("Database connected successfully");
+        logger.info("Database connected successfully");
     } catch (error) {
-        console.error("Database connection failed:", error.message);
+        logger.error({ err: error }, "Database connection failed");
         throw error;
     }
 };
@@ -16,9 +17,9 @@ const connectToDB = async () => {
 const disconnectFromDB = async () => {
     try {
         await mongoose.disconnect();
-        console.log("Database disconnected successfully");
+        logger.info("Database disconnected successfully");
     } catch (error) {
-        console.error("Database disconnection failed:", error.message);
+        logger.error({ err: error }, "Database disconnection failed");
         throw error;
     }
 };

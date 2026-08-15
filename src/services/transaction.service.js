@@ -5,6 +5,7 @@ const TransactionHistoryDTO = require("../dto/transaction-history.dto");
 const mongoose = require("mongoose");
 const emailService = require("../services/email.service");
 const ApiError = require("../utils/ApiError");
+const logger = require("../config/logger");
 
 const getTransactionHistory = async (userId, query) => {
   const page = Math.max(parseInt(query.page, 10) || 1, 1);
@@ -261,9 +262,9 @@ const createTransaction = async ({
         toAccount,
       );
     } catch (emailError) {
-      console.error(
-        "Transaction completed but email failed:",
-        emailError.message,
+      logger.warn(
+        { err: emailError, transactionId: transaction._id },
+        "Transaction completed but receipt email failed to send"
       );
     }
 
@@ -425,9 +426,9 @@ const createInitialFundsTransaction = async ({
         receiverAccount._id,
       );
     } catch (emailError) {
-      console.error(
-        "Initial funds transaction completed but email failed:",
-        emailError.message,
+      logger.warn(
+        { err: emailError, transactionId: transaction._id },
+        "Initial funds transaction completed but receipt email failed to send"
       );
     }
 

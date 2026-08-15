@@ -2,6 +2,7 @@ const User = require("../models/user.model");
 const emailService = require("./email.service");
 const TokenBlacklist = require("../models/blacklist.model");
 const ApiError = require("../utils/ApiError");
+const logger = require("../config/logger");
 
 const registerUser = async ({ email, name, password }) => {
     const existingUser = await User.findOne({ email });
@@ -25,9 +26,9 @@ const registerUser = async ({ email, name, password }) => {
             user.name
         );
     } catch (emailError) {
-        console.error(
-            "Registration successful but email failed:",
-            emailError
+        logger.warn(
+            { err: emailError, userId: user._id },
+            "Registration succeeded but welcome email failed to send"
         );
     }
 

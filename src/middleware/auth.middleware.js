@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 const TokenBlacklist = require("../models/blacklist.model");
+const logger = require("../config/logger");
 
 const getToken = (req) => {
     // 1. Check HTTP-only cookie
@@ -66,9 +67,9 @@ const authenticate = async (req, res, next) => {
 
         next();
     } catch (error) {
-        console.error(
-            "Authentication error:",
-            error.message
+        logger.warn(
+            { err: error },
+            "Authentication failed — invalid or expired token"
         );
 
         return res.status(401).json({
@@ -106,9 +107,9 @@ const authSystemUserMiddleware = async (req, res, next) => {
 
         next();
     } catch (error) {
-        console.error(
-            "System user verification error:",
-            error.message
+        logger.error(
+            { err: error },
+            "System user verification failed"
         );
 
         return res.status(500).json({
