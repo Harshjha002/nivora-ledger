@@ -1,9 +1,10 @@
 const pino = require("pino");
+const env = require("./env");
 
-const isDevelopment = process.env.NODE_ENV !== "production";
+const isDevelopment = env.NODE_ENV !== "production";
 
 const logger = pino({
-    level: process.env.LOG_LEVEL || "info",
+    level: env.LOG_LEVEL,
 
     redact: {
         paths: [
