@@ -1,13 +1,4 @@
 services:
-  mongodb:
-    image: mongo:8
-    container_name: nivora-mongodb
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - nivora-mongodb-data:/data/db
-
   api:
     build: .
     container_name: nivora-api
@@ -18,9 +9,3 @@ services:
       - .env
     environment:
       NODE_ENV: production
-      MONGO_URI: mongodb://mongodb:27017/nivora-ledger
-    depends_on:
-      - mongodb
-
-volumes:
-  nivora-mongodb-data:
