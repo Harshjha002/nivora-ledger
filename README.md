@@ -21,11 +21,14 @@ Most "wallet" or "expense tracker" side projects store a mutable `balance` field
 |---|---|
 | Runtime | Node.js (CommonJS) |
 | Framework | Express 5 |
-| Database | MongoDB + Mongoose (multi-document ACID transactions) |
+| Database | MongoDB + Mongoose (multi-document ACID transactions, MongoDB Atlas in production) |
 | Auth | JWT (HTTP-only cookie or Bearer token) + server-side token blacklist for logout |
 | Validation | Zod |
 | Email | Nodemailer (Gmail OAuth2) for transactional notifications |
 | Password hashing | bcryptjs |
+| Logging | Pino (structured, severity-aware, with field-level redaction of secrets) |
+| API docs | OpenAPI 3 spec, served interactively via Swagger UI at `/api-docs` |
+| Containerization | Docker + Docker Compose |
 
 ## Architecture
 
@@ -95,7 +98,13 @@ Base URL: `/v1/api`
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/health` | Service liveness check |
+| GET | `/health` | Aggregate health check |
+| GET | `/health/live` | Liveness probe — process is up (used by Docker `HEALTHCHECK`) |
+| GET | `/health/ready` | Readiness probe — confirms the MongoDB connection is actually up, not just the process |
+
+### API documentation
+
+Interactive Swagger UI, generated from the OpenAPI spec at `src/docs/openapi.yaml`, is served at `/api-docs` once the server is running.
 
 ## Getting started
 
@@ -105,6 +114,19 @@ Base URL: `/v1/api`
 - A MongoDB connection (local or Atlas) that supports transactions (replica set or Atlas cluster)
 
 ### Setup
+
+**Option A — Docker (recommended, matches production)**
+
+```bash
+git clone https://github.com/Harshjha002/nivora-ledger.git
+cd nivora-ledger
+cp .env.example .env   # fill in the values below — MONGO_URI must point at an Atlas cluster
+docker compose up --build
+```
+
+The app expects `MONGO_URI` to point at a MongoDB **Atlas** cluster (or any real replica set) — Atlas clusters are always provisioned as replica sets, which `session.withTransaction()` requires. A bare standalone MongoDB container is not sufficient, which is why Compose here doesn't bundle a local Mongo service.
+
+**Option B — Local Node**
 
 ```bash
 git clone https://github.com/Harshjha002/nivora-ledger.git
@@ -121,14 +143,18 @@ npm start                # production
 | Variable | Description |
 |---|---|
 | `PORT` | Port the server listens on (defaults to 3000) |
-| `MONGO_URI` | MongoDB connection string |
+| `MONGO_URI` | MongoDB connection string — must be a replica set (Atlas satisfies this automatically) |
 | `JWT_SECRET` | Secret used to sign JWTs |
 | `EMAIL_USER` | Gmail address used to send transactional emails |
 | `CLIENT_ID` | Google OAuth2 client ID — used only to authorize Gmail API access for sending emails (not user login) |
 | `CLIENT_SECRET` | Google OAuth2 client secret — same purpose |
 | `REFRESH_TOKEN` | Long-lived token so the app can send email without re-authenticating each time |
+| `CLIENT_URL` | Frontend/client origin, used for CORS configuration |
+| `LOG_LEVEL` | Pino log level: `fatal`, `error`, `warn`, `info`, `debug`, or `trace` (default: `info`) |
 | `LOGIN_RATE_LIMIT_MAX` | Max login attempts per email within the window (default: 5) |
 | `LOGIN_RATE_LIMIT_WINDOW_MS` | Login rate-limit window in ms (default: 15 minutes) |
+| `REGISTER_RATE_LIMIT_MAX` | Max registration attempts per IP within the window (default: 5) |
+| `REGISTER_RATE_LIMIT_WINDOW_MS` | Registration rate-limit window in ms (default: 15 minutes) |
 | `TRANSACTION_RATE_LIMIT_MAX` | Max transfer attempts per user within the window (default: 30) |
 | `TRANSACTION_RATE_LIMIT_WINDOW_MS` | Transfer rate-limit window in ms (default: 1 minute) |
 
@@ -140,7 +166,7 @@ curl http://localhost:3000/health
 
 ## Testing
 
-29 Jest/Supertest tests covering auth, account isolation, and transfer correctness — run against a real single-node MongoDB **replica set** (via `mongodb-memory-server`), not a standalone instance, so transactional code paths are actually exercised, not mocked around.
+38 Jest/Supertest tests across auth, account isolation, transfer correctness, rate limiting, and health checks — run against a real single-node MongoDB **replica set** (via `mongodb-memory-server`), not a standalone instance, so transactional code paths are actually exercised, not mocked around.
 
 ```bash
 npm install --save-dev jest supertest mongodb-memory-server
@@ -151,22 +177,29 @@ Notable cases:
 - **Concurrency / no-double-spend proof** — fires 5 simultaneous full-balance transfer attempts from one account and asserts exactly one succeeds and the balance never goes negative, proving the `transferVersion` locking actually works under a race, not just on paper.
 - **Idempotency proof** — retries a transfer with the same `Idempotency-Key` and asserts the balance is unaffected by the retry.
 - **Account isolation** — one user can never read another user's account balance or transaction history (404/403, not a data leak).
-- **Rate limiting** — both the login limiter (keyed per email) and the transfer limiter (keyed per user) are asserted to actually return `429` once exceeded, not just configured and assumed to work.
+- **Rate limiting** — both the login limiter (keyed per email) and the transfer limiter (keyed per user) are asserted to actually return `429` once exceeded, not just configured and assumed to work. Register, login, and transaction rate-limit tests each run in their own file with an isolated in-memory store, reset between every test, so one test's legitimate requests can never exhaust another test's budget.
 - **Ledger immutability** — direct mutation of a ledger entry is asserted to throw at the schema level.
 
 ## Project structure
 
 ```
 src/
-├── app.js                     # Express app, route mounting, error handling
-├── config/db.js                # MongoDB connection
-├── controller/                 # Route handlers (auth, account, transaction)
-├── middleware/                 # JWT auth, system-user guard, Zod validation
-├── models/                     # User, Account, Transaction, Ledger, TokenBlacklist
-├── routes/                     # Route definitions
-├── services/email.service.js   # Transactional email templates
-└── validation/                 # Zod schemas
-server.js                       # Entry point
+├── app.js                       # Express app, route mounting, error handling
+├── config/
+│   ├── db.js                     # MongoDB connection
+│   ├── env.js                    # Validated environment configuration
+│   ├── logger.js                 # Pino structured logger (with secret redaction)
+│   └── swagger.js                # Swagger UI setup
+├── controller/                   # Route handlers (auth, account, transaction)
+├── services/                     # Business logic (auth, account, transaction, email)
+├── middleware/                   # JWT auth, system-user guard, Zod validation, rate limiting
+├── models/                       # User, Account, Transaction, Ledger, TokenBlacklist
+├── routes/                       # Route definitions
+├── dto/                          # Response shaping (transaction history)
+├── validation/                   # Zod schemas
+└── docs/openapi.yaml             # OpenAPI 3 spec, served via /api-docs
+server.js                         # Entry point — startup, graceful shutdown
+Dockerfile / docker-compose.yml   # Containerized app (Atlas for MongoDB)
 ```
 
 ## Design decisions worth knowing about
@@ -179,21 +212,22 @@ server.js                       # Entry point
 ## Roadmap
 
 **Completed**
-- [x] Automated tests (Jest/Supertest) covering the transfer flow, concurrency, and idempotency edge cases — 29 tests, run against a real Mongo replica set
+- [x] Automated tests (Jest/Supertest) covering the transfer flow, concurrency, idempotency, and rate limiting — 38 tests, run against a real Mongo replica set
 - [x] Paginated transaction history endpoint
-- [x] Rate limiting on auth and transfer endpoints (env-configurable, per-email and per-user keyed)
+- [x] Rate limiting on auth and transfer endpoints (env-configurable, per-email/per-IP/per-user keyed, with isolated resettable stores for testing)
+- [x] Structured logging with Pino, including request correlation via `pino-http` and field-level redaction of secrets (passwords, tokens, cookies)
+- [x] OpenAPI 3 specification with interactive Swagger UI at `/api-docs`
+- [x] Liveness and readiness health checks (`/health/live`, `/health/ready`), with the readiness probe actually verifying the MongoDB connection
+- [x] Dockerfile + docker-compose for one-command local setup, running against MongoDB Atlas (a real replica set, satisfying the transaction requirement without extra config)
 
 **Planned**
-- [ ] Redis-backed rate limiting + distributed idempotency locking
-- [ ] Dockerfile + docker-compose for one-command local setup
-- [ ] CI pipeline (lint + test on every PR)
-- [ ] Deployed on AWS (ECS/EC2) with MongoDB Atlas
-- [ ] Structured logging (Pino/Winston)
-- [ ] Prometheus metrics + Grafana dashboard
-- [ ] OpenAPI/Swagger documentation
 - [ ] Transaction reversal endpoint (offsetting ledger entries)
-- [ ] (Stretch) Kafka event stream for completed transactions
-- [ ] (Stretch) Real-time balance updates via WebSockets
+- [ ] CI pipeline (lint + test on every PR)
+- [ ] Deployed to production with a live URL
+- [ ] Prometheus metrics + Grafana dashboard
+
+**Deliberately out of scope for this project**
+Redis, Kafka, and Elasticsearch are intentionally not part of this repo. A single-service ledger with a small, well-understood event surface (one email notification) doesn't provide a genuine justification for a message broker or a search index — adding them here would be resume-keyword engineering rather than solving a real problem this system has. They're reserved for a separate, dedicated microservices project where multi-consumer event fan-out and full-text search are actual product requirements.
 
 ## License
 
