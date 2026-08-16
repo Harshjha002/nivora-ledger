@@ -35,8 +35,7 @@ jobs:
   build-and-push:
     name: Build & push Docker image
     needs: test
-    # Only build+push on an actual push to main — never on a PR, since a
-    # PR from a fork shouldn't be able to publish an image under your name.
+    # Only build+push on an actual push to main 
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -48,8 +47,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Compute lowercase image name
-        # Docker registries require lowercase image names; GitHub repo
-        # names can contain uppercase, so this can't be skipped.
         id: image
         run: |
           echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
@@ -59,7 +56,6 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          # GITHUB_TOKEN is provided automatically — no secret to create.
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx

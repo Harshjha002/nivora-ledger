@@ -1,6 +1,6 @@
 const logger = require("../config/logger");
 
-const errorMiddleware = (err, req, res, next) => {
+const errorMiddleware = (err, req, res, _next) => {
     const statusCode = err.statusCode || 500;
 
     logger.error(
