@@ -61,6 +61,12 @@ transactionRoutes.post(
     transactionController.createInitialFundsTransaction
 );
 
+transactionRoutes.post(
+    "/:transactionId/reverse",
+    authMiddleware,
+    authSystemUserMiddleware,
+    transactionController.reverseTransaction
+);
 
 
 

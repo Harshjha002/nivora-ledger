@@ -71,6 +71,149 @@ const getTransactionHistory = async (userId, query) => {
   };
 };
 
+const reverseTransaction = async (transactionId) => {
+  if (!mongoose.isValidObjectId(transactionId)) {
+    throw new ApiError(400, "Invalid transaction ID");
+  }
+
+  const session = await mongoose.startSession();
+
+  let reversalTransaction;
+
+  try {
+    await session.withTransaction(async () => {
+      const originalTransaction =
+        await Transaction.findById(transactionId).session(session);
+
+      if (!originalTransaction) {
+        throw new ApiError(404, "Transaction not found");
+      }
+
+      if (originalTransaction.status === "REVERSED") {
+        throw new ApiError(400, "Transaction has already been reversed");
+      }
+
+      if (originalTransaction.status !== "COMPLETED") {
+        throw new ApiError(400, "Only completed transactions can be reversed");
+      }
+
+      if (originalTransaction.reversalOf) {
+        throw new ApiError(400, "Transaction has already been reversed");
+      }
+
+      const { fromAccount, toAccount, amount } = originalTransaction;
+
+      // Lock both accounts inside the transaction.
+      const accounts = await Account.find({
+        _id: {
+          $in: [fromAccount, toAccount],
+        },
+        status: "ACTIVE",
+      })
+        .sort({ _id: 1 })
+        .session(session);
+
+      if (accounts.length !== 2) {
+        throw new ApiError(400, "Both accounts must be active for reversal");
+      }
+
+      const receiverAccount = accounts.find(
+        (account) => account._id.toString() === toAccount.toString(),
+      );
+
+      if (!receiverAccount) {
+        throw new ApiError(404, "Receiver account not found");
+      }
+
+      // Increment transferVersion to serialize balance-changing
+      // operations involving the original receiver.
+      await Account.updateMany(
+        {
+          _id: {
+            $in: [fromAccount, toAccount],
+          },
+          status: "ACTIVE",
+        },
+        {
+          $inc: {
+            transferVersion: 1,
+          },
+        },
+        {
+          session,
+        },
+      );
+
+      const receiverBalance = await receiverAccount.getBalance(session);
+
+      if (receiverBalance < amount) {
+        const error = new ApiError(
+          400,
+          "Receiver has insufficient balance for reversal",
+        );
+
+        error.code = "INSUFFICIENT_BALANCE";
+        error.currentBalance = receiverBalance;
+        error.requestedAmount = amount;
+
+        throw error;
+      }
+
+      const reversalIdempotencyKey = `reversal-${originalTransaction._id.toString()}`;
+
+      [reversalTransaction] = await Transaction.create(
+        [
+          {
+            fromAccount: toAccount,
+            toAccount: fromAccount,
+            amount,
+            idempotencyKey: reversalIdempotencyKey,
+            status: "COMPLETED",
+            reversalOf: originalTransaction._id,
+          },
+        ],
+        {
+          session,
+        },
+      );
+
+      await Ledger.create(
+    [
+        {
+            account: toAccount,
+            amount,
+            transaction: reversalTransaction._id,
+            type: "DEBIT",
+        },
+        {
+            account: fromAccount,
+            amount,
+            transaction: reversalTransaction._id,
+            type: "CREDIT",
+        },
+    ],
+    {
+        session,
+        ordered: true,
+    }
+);
+
+      originalTransaction.status = "REVERSED";
+
+      await originalTransaction.save({
+        session,
+      });
+    });
+
+    return {
+      message: "Transaction reversed successfully",
+      transaction: reversalTransaction,
+    };
+  } finally {
+    await session.endSession();
+  }
+};
+
 /**
  * Create a new transaction
  *
@@ -264,7 +407,7 @@ const createTransaction = async ({
     } catch (emailError) {
       logger.warn(
         { err: emailError, transactionId: transaction._id },
-        "Transaction completed but receipt email failed to send"
+        "Transaction completed but receipt email failed to send",
       );
     }
 
@@ -428,7 +571,7 @@ const createInitialFundsTransaction = async ({
     } catch (emailError) {
       logger.warn(
         { err: emailError, transactionId: transaction._id },
-        "Initial funds transaction completed but receipt email failed to send"
+        "Initial funds transaction completed but receipt email failed to send",
       );
     }
 
@@ -464,4 +607,5 @@ module.exports = {
   getTransactionHistory,
   createTransaction,
   createInitialFundsTransaction,
+  reverseTransaction,
 };

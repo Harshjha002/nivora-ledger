@@ -11,6 +11,8 @@ const { connect, closeDatabase, clearDatabase } = require("./setup");
 const app = require("../src/app");
 const User = require("../src/models/user.model");
 const Account = require("../src/models/account.model");
+const Transaction = require("../src/models/transaction.model");
+const Ledger = require("../src/models/ledger.model");
 
 beforeAll(async () => {
   await connect();
@@ -238,8 +240,6 @@ describe("POST /v1/api/transaction (transfer)", () => {
   });
 
   it("blocks direct mutation of ledger entries at the schema level", async () => {
-    const Ledger = require("../src/models/ledger.model");
-
     const { userAgent, userAccountId } = await createFundedAccount(5000);
     const receiverAgent = await registerAndLogin();
     const receiverAccountRes = await receiverAgent.post("/v1/api/account");
@@ -528,5 +528,225 @@ describe("POST /v1/api/transaction/system/initial-funds", () => {
       });
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /v1/api/transaction/:transactionId/reverse", () => {
+  it("allows a system user to reverse a completed transaction", async () => {
+    const sender = await createFundedAccount(10000);
+    const receiver = await registerAndLogin();
+
+    const receiverAccountRes = await receiver.post("/v1/api/account");
+    const receiverAccountId = receiverAccountRes.body.account._id;
+
+    const transferRes = await sender.userAgent
+      .post("/v1/api/transaction")
+      .set("Idempotency-Key", idKey())
+      .send({
+        fromAccount: sender.userAccountId,
+        toAccount: receiverAccountId,
+        amount: 3000,
+      })
+      .expect(201);
+
+    const originalTransactionId = transferRes.body.transaction._id;
+
+    const reversalRes = await sender.systemAgent
+      .post(`/v1/api/transaction/${originalTransactionId}/reverse`)
+      .expect(200);
+
+    expect(reversalRes.body.message).toBe(
+      "Transaction reversed successfully",
+    );
+
+    expect(reversalRes.body.transaction).toMatchObject({
+      status: "COMPLETED",
+      amount: 3000,
+      reversalOf: originalTransactionId,
+    });
+
+    const senderBalance = await sender.userAgent.get(
+      `/v1/api/account/balance/${sender.userAccountId}`,
+    );
+
+    const receiverBalance = await receiver.get(
+      `/v1/api/account/balance/${receiverAccountId}`,
+    );
+
+    expect(senderBalance.body.balance).toBe(10000);
+    expect(receiverBalance.body.balance).toBe(0);
+
+    const originalTransaction = await Transaction.findById(
+      originalTransactionId,
+    );
+
+    expect(originalTransaction.status).toBe("REVERSED");
+
+    const reversalTransaction = await Transaction.findOne({
+      reversalOf: originalTransactionId,
+    });
+
+    expect(reversalTransaction).not.toBeNull();
+    expect(reversalTransaction.status).toBe("COMPLETED");
+
+    const reversalEntries = await Ledger.find({
+      transaction: reversalTransaction._id,
+    });
+
+    expect(reversalEntries).toHaveLength(2);
+
+    expect(reversalEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          account: expect.objectContaining({
+            toString: expect.any(Function),
+          }),
+          amount: 3000,
+          type: "DEBIT",
+        }),
+        expect.objectContaining({
+          amount: 3000,
+          type: "CREDIT",
+        }),
+      ]),
+    );
+  });
+
+  it("prevents a normal user from reversing a transaction", async () => {
+    const sender = await createFundedAccount(10000);
+    const receiver = await registerAndLogin();
+
+    const receiverAccountRes = await receiver.post("/v1/api/account");
+
+    const transferRes = await sender.userAgent
+      .post("/v1/api/transaction")
+      .set("Idempotency-Key", idKey())
+      .send({
+        fromAccount: sender.userAccountId,
+        toAccount: receiverAccountRes.body.account._id,
+        amount: 1000,
+      })
+      .expect(201);
+
+    const transactionId = transferRes.body.transaction._id;
+
+    const response = await sender.userAgent.post(
+      `/v1/api/transaction/${transactionId}/reverse`,
+    );
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toBe(
+      "Forbidden: system user access required",
+    );
+  });
+
+  it("rejects an unauthenticated reversal request", async () => {
+    const sender = await createFundedAccount(10000);
+    const receiver = await registerAndLogin();
+
+    const receiverAccountRes = await receiver.post("/v1/api/account");
+
+    const transferRes = await sender.userAgent
+      .post("/v1/api/transaction")
+      .set("Idempotency-Key", idKey())
+      .send({
+        fromAccount: sender.userAccountId,
+        toAccount: receiverAccountRes.body.account._id,
+        amount: 1000,
+      })
+      .expect(201);
+
+    const transactionId = transferRes.body.transaction._id;
+
+    const response = await request(app).post(
+      `/v1/api/transaction/${transactionId}/reverse`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("prevents reversing the same transaction twice", async () => {
+    const sender = await createFundedAccount(10000);
+    const receiver = await registerAndLogin();
+
+    const receiverAccountRes = await receiver.post("/v1/api/account");
+
+    const transferRes = await sender.userAgent
+      .post("/v1/api/transaction")
+      .set("Idempotency-Key", idKey())
+      .send({
+        fromAccount: sender.userAccountId,
+        toAccount: receiverAccountRes.body.account._id,
+        amount: 2000,
+      })
+      .expect(201);
+
+    const transactionId = transferRes.body.transaction._id;
+
+    await sender.systemAgent
+      .post(`/v1/api/transaction/${transactionId}/reverse`)
+      .expect(200);
+
+    const secondReversal = await sender.systemAgent.post(
+      `/v1/api/transaction/${transactionId}/reverse`,
+    );
+
+    expect(secondReversal.status).toBe(400);
+    expect(secondReversal.body.message).toBe(
+      "Transaction has already been reversed",
+    );
+  });
+
+  it("rejects reversal when the receiver no longer has enough balance", async () => {
+    const sender = await createFundedAccount(10000);
+    const receiver = await registerAndLogin();
+
+    const receiverAccountRes = await receiver.post("/v1/api/account");
+    const receiverAccountId = receiverAccountRes.body.account._id;
+
+    const transferRes = await sender.userAgent
+      .post("/v1/api/transaction")
+      .set("Idempotency-Key", idKey())
+      .send({
+        fromAccount: sender.userAccountId,
+        toAccount: receiverAccountId,
+        amount: 3000,
+      })
+      .expect(201);
+
+    const transactionId = transferRes.body.transaction._id;
+
+    // Receiver spends the transferred money.
+    const thirdUser = await registerAndLogin();
+    const thirdAccountRes = await thirdUser.post("/v1/api/account");
+
+    await receiver
+      .post("/v1/api/transaction")
+      .set("Idempotency-Key", idKey())
+      .send({
+        fromAccount: receiverAccountId,
+        toAccount: thirdAccountRes.body.account._id,
+        amount: 3000,
+      })
+      .expect(201);
+
+    const reversalRes = await sender.systemAgent.post(
+      `/v1/api/transaction/${transactionId}/reverse`,
+    );
+
+    expect(reversalRes.status).toBe(400);
+    expect(reversalRes.body.message).toBe(
+      "Receiver has insufficient balance for reversal",
+    );
+
+    const originalTransaction = await Transaction.findById(transactionId);
+
+    expect(originalTransaction.status).toBe("COMPLETED");
+
+    const reversal = await Transaction.findOne({
+      reversalOf: transactionId,
+    });
+
+    expect(reversal).toBeNull();
   });
 });
