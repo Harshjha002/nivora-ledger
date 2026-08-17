@@ -209,6 +209,15 @@ const reverseTransaction = async (transactionId) => {
       message: "Transaction reversed successfully",
       transaction: reversalTransaction,
     };
+  } catch (error) {
+    if (
+      error.code === 11000 &&
+      (error.keyPattern?.idempotencyKey || error.keyPattern?.reversalOf)
+    ) {
+      throw new ApiError(400, "Transaction has already been reversed");
+    }
+
+    throw error;
   } finally {
     await session.endSession();
   }

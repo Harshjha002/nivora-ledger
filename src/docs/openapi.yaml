@@ -19,7 +19,51 @@ tags:
   - name: Transactions
     description: Ledger transactions
 
+  - name: System
+    description: Health and readiness checks
+
 paths:
+
+  # ============================================================
+  # SYSTEM
+  # ============================================================
+
+  /health:
+    get:
+      summary: Basic health check
+      description: Always returns 200 if the process is running and able to respond.
+      tags:
+        - System
+      responses:
+        "200":
+          description: API is running
+
+  /health/live:
+    get:
+      summary: Liveness probe
+      description: >
+        Confirms the process is up and able to handle requests. Does not check
+        the database connection. Used by Docker's HEALTHCHECK.
+      tags:
+        - System
+      responses:
+        "200":
+          description: API is alive
+
+  /health/ready:
+    get:
+      summary: Readiness probe
+      description: >
+        Confirms the process is up AND the MongoDB connection is currently
+        established (mongoose.connection.readyState === 1). Suitable for a
+        load balancer or orchestrator readiness check.
+      tags:
+        - System
+      responses:
+        "200":
+          description: API is ready to serve traffic
+        "503":
+          description: API is running but not ready (database not connected)
 
   # ============================================================
   # AUTHENTICATION
@@ -389,6 +433,54 @@ paths:
 
         "409":
           description: Transaction is still being processed or duplicate idempotency key
+
+        "500":
+          description: Internal server error
+
+  /v1/api/transaction/{transactionId}/reverse:
+    post:
+      summary: Reverse a completed transaction
+      description: >
+        Reverses a completed transaction by creating a new, offsetting transaction
+        (new ledger entries in the opposite direction) rather than editing the
+        original — preserving full audit history. Requires system user access.
+        Fails if the receiver no longer has sufficient balance to be debited.
+      tags:
+        - Transactions
+      security:
+        - cookieAuth: []
+
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          description: MongoDB ObjectId of the completed transaction to reverse.
+          schema:
+            type: string
+          example: 64fabcd123456789abcdef12
+
+      responses:
+        "200":
+          description: Transaction reversed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionResponse"
+
+        "400":
+          description: >
+            Invalid transaction ID, transaction not found in a reversible state
+            (not COMPLETED, already reversed, or one of the two accounts is
+            inactive), or receiver has insufficient balance for the reversal
+
+        "401":
+          description: Authentication required
+
+        "403":
+          description: System user access required
+
+        "404":
+          description: Transaction not found
 
         "500":
           description: Internal server error

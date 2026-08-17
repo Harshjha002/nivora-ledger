@@ -40,7 +40,10 @@ const loginRateLimiter = createRateLimiter({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   store: loginStore,
-  keyGenerator: (req) => req.body.email,
+  keyGenerator: (req) =>
+    typeof req.body?.email === "string" && req.body.email.length > 0
+      ? req.body.email
+      : req.ip,
 });
 
 const transactionRateLimiter = createRateLimiter({

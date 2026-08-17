@@ -10,7 +10,7 @@ const router = express.Router();
 /**
  * - POST /v1/api/accounts/
  * - Create a new account
- * - protected routh
+ * - protected route
  */
 router.post(
     "/",

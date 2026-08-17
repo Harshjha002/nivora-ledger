@@ -1,5 +1,4 @@
 const transactionService = require("../services/transaction.service");
-const logger = require("../config/logger");
 const getTransactionHistory = async (req, res, next) => {
   try {
     const result = await transactionService.getTransactionHistory(
@@ -64,13 +63,6 @@ const reverseTransaction = async (req, res, next) => {
       transaction: result.transaction,
     });
   } catch (error) {
-    logger.error(
-      {
-        err: error,
-        transactionId: req.params.transactionId,
-      },
-      "Transaction reversal failed"
-    );
 
     next(error);
   }

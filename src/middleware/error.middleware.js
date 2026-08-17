@@ -1,56 +1,52 @@
 const logger = require("../config/logger");
 
-const errorMiddleware = (err, req, res, _next) => {
-    const statusCode = err.statusCode || 500;
+const resolveStatusCode = (err) => {
+    if (err.name === "ValidationError") return 400;
+    if (err.name === "CastError") return 400;
+    if (err.code === 11000) return 409;
+    if (err.statusCode) return err.statusCode;
+    return 500;
+};
 
-    logger.error(
-        {
-            err,
-            requestId: req.id,
-            method: req.method,
-            url: req.originalUrl,
-            statusCode,
-        },
-        "Request failed"
-    );
-
-    // Mongoose validation error
+const resolveResponseBody = (err) => {
     if (err.name === "ValidationError") {
-        return res.status(400).json({
-            status: "failed",
-            message: err.message,
-        });
+        return { status: "failed", message: err.message };
     }
 
-    // Invalid MongoDB ObjectId
     if (err.name === "CastError") {
-        return res.status(400).json({
-            status: "failed",
-            message: "Invalid ID",
-        });
+        return { status: "failed", message: "Invalid ID" };
     }
 
-    // MongoDB duplicate key
     if (err.code === 11000) {
-        return res.status(409).json({
-            status: "failed",
-            message: "Duplicate value already exists",
-        });
+        return { status: "failed", message: "Duplicate value already exists" };
     }
 
-    // Custom ApiError
     if (err.statusCode) {
-        return res.status(err.statusCode).json({
-            status: "failed",
-            message: err.message,
-        });
+        return { status: "failed", message: err.message };
     }
 
-    // Unknown/unexpected error
-    return res.status(500).json({
-        status: "failed",
-        message: "Internal server error",
-    });
+    return { status: "failed", message: "Internal server error" };
+};
+
+const errorMiddleware = (err, req, res, _next) => {
+    const statusCode = resolveStatusCode(err);
+
+    const logContext = {
+        err,
+        requestId: req.id,
+        method: req.method,
+        url: req.originalUrl,
+        statusCode,
+    };
+
+
+    if (statusCode >= 500) {
+        logger.error(logContext, "Request failed");
+    } else {
+        logger.warn(logContext, "Request rejected");
+    }
+
+    return res.status(statusCode).json(resolveResponseBody(err));
 };
 
 module.exports = errorMiddleware;
