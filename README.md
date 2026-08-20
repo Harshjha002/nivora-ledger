@@ -9,11 +9,12 @@ This isn't a CRUD wallet with a `balance` field that gets incremented and decrem
 Most "wallet" or "expense tracker" side projects store a mutable `balance` field on the user and update it directly. That approach silently breaks under concurrency, offers no audit trail, and can't recover from partial failures. Nivora Ledger was built to solve that properly:
 
 - **No stored balance.** Balance is always computed by summing ledger entries. There is nothing to get out of sync.
-- **Immutable ledger.** Ledger entries can never be updated or deleted at the schema level (enforced via Mongoose pre-hooks) — a real audit trail, not just a convention.
+- **Immutable ledger.** Ledger entries can never be updated or deleted at the schema level (enforced via Mongoose pre-hooks) — a real audit trail, not just a convention. Corrections are modeled as new, offsetting entries, not edits.
 - **Atomic transfers.** Debit and credit entries for a transfer are created inside a single MongoDB session/transaction. Either both happen, or neither does.
 - **Idempotent by design.** Every transfer requires an `Idempotency-Key` header. Retried requests (e.g. from a flaky client or network timeout) return the original result instead of double-spending.
 - **Optimistic concurrency guard.** Sender accounts are versioned (`transferVersion`) and locked inside the transaction to prevent race conditions on simultaneous transfers from the same account.
 - **Money stored as integers.** Amounts are stored in the smallest currency unit (paise), avoiding floating-point rounding bugs common in beginner finance projects.
+- **Auditable reversal.** Admin-authorized reversals never delete or edit history — they create a compensating entry, preserving a full, honest audit trail.
 
 ## Tech stack
 
@@ -29,6 +30,7 @@ Most "wallet" or "expense tracker" side projects store a mutable `balance` field
 | Logging | Pino (structured, severity-aware, with field-level redaction of secrets) |
 | API docs | OpenAPI 3 spec, served interactively via Swagger UI at `/api-docs` |
 | Containerization | Docker + Docker Compose |
+| CI/CD | GitHub Actions — lint + test on every push, Docker image published to GHCR on `main` |
 
 ## Architecture
 
@@ -40,7 +42,7 @@ Express App (src/app.js)
   │
   ├── /v1/api/auth          →  register, login, logout
   ├── /v1/api/account       →  create account, list accounts, get balance
-  └── /v1/api/transaction   →  transfer funds, seed initial funds (system user)
+  └── /v1/api/transaction   →  transfer funds, reverse transaction, seed initial funds (system user)
   │
   ▼
 Middleware: auth (JWT + blacklist check) → validate (Zod schema)
@@ -49,7 +51,7 @@ Middleware: auth (JWT + blacklist check) → validate (Zod schema)
 Controllers → Mongoose Models (User, Account, Transaction, Ledger, TokenBlacklist)
   │
   ▼
-MongoDB (session-scoped multi-document transactions for transfers)
+MongoDB (session-scoped multi-document transactions for transfers and reversals)
 ```
 
 **The transfer flow** (`POST /v1/api/transaction`), step by step:
@@ -65,6 +67,15 @@ MongoDB (session-scoped multi-document transactions for transfers)
 9. Write a `DEBIT` ledger entry (sender) and a `CREDIT` ledger entry (receiver)
 10. Mark the transaction `COMPLETED` and commit the transaction
 11. Send a (best-effort, non-blocking) email receipt — a failed email never rolls back a completed transfer
+
+**The reversal flow** (admin-authorized), step by step:
+
+1. Confirm the requester is an authorized admin/system user
+2. Locate the original `COMPLETED` transaction and confirm it hasn't already been reversed
+3. Start a MongoDB session/transaction
+4. Write new, offsetting `DEBIT`/`CREDIT` ledger entries that exactly invert the original transfer — the original entries are never edited or deleted
+5. Mark the original transaction as `REVERSED` and record a link to the new compensating transaction
+6. Commit — both the original and the reversal remain permanently visible in the ledger for audit purposes
 
 ## API reference
 
@@ -92,7 +103,10 @@ Base URL: `/v1/api`
 |---|---|---|---|
 | GET | `/transaction` | Paginated transaction history (sent + received), optional `?accountId=` filter | Yes |
 | POST | `/transaction` | Transfer funds between two accounts | Yes + `Idempotency-Key` header, rate-limited |
+| POST | `/transaction/:id/reverse` | Reverse a completed transaction via compensating ledger entries | Yes (admin) |
 | POST | `/transaction/system/initial-funds` | Seed an account with funds from the system account | Yes (system user) + `Idempotency-Key` header, rate-limited |
+
+> Update the reversal route path above to match your actual route file if it differs.
 
 ### Health
 
@@ -166,7 +180,9 @@ curl http://localhost:3000/health
 
 ## Testing
 
-38 Jest/Supertest tests across auth, account isolation, transfer correctness, rate limiting, and health checks — run against a real single-node MongoDB **replica set** (via `mongodb-memory-server`), not a standalone instance, so transactional code paths are actually exercised, not mocked around.
+> **TODO: confirm the current test count** (run `npm test` and update the number below — the previous README said 38, and a later commit improved coverage, so this number has likely changed).
+
+**[X] Jest/Supertest tests** across auth, account isolation, transfer correctness, reversal, rate limiting, and health checks — run against a real single-node MongoDB **replica set** (via `mongodb-memory-server`), not a standalone instance, so transactional code paths are actually exercised, not mocked around.
 
 ```bash
 npm install --save-dev jest supertest mongodb-memory-server
@@ -179,6 +195,14 @@ Notable cases:
 - **Account isolation** — one user can never read another user's account balance or transaction history (404/403, not a data leak).
 - **Rate limiting** — both the login limiter (keyed per email) and the transfer limiter (keyed per user) are asserted to actually return `429` once exceeded, not just configured and assumed to work. Register, login, and transaction rate-limit tests each run in their own file with an isolated in-memory store, reset between every test, so one test's legitimate requests can never exhaust another test's budget.
 - **Ledger immutability** — direct mutation of a ledger entry is asserted to throw at the schema level.
+- **Reversal correctness** — reversing a completed transaction produces exact offsetting entries, marks the original as `REVERSED`, and never mutates or deletes the original entries.
+
+## CI/CD
+
+GitHub Actions runs on every push: install → lint → test. On `main`, a Docker image is built and published to GitHub Container Registry (GHCR).
+
+> Add a build-status badge here once you have the workflow file name, e.g.
+> `![CI](https://github.com/Harshjha002/nivora-ledger/actions/workflows/<file>.yml/badge.svg)`
 
 ## Project structure
 
@@ -191,7 +215,7 @@ src/
 │   ├── logger.js                 # Pino structured logger (with secret redaction)
 │   └── swagger.js                # Swagger UI setup
 ├── controller/                   # Route handlers (auth, account, transaction)
-├── services/                     # Business logic (auth, account, transaction, email)
+├── services/                     # Business logic (auth, account, transaction, reversal, email)
 ├── middleware/                   # JWT auth, system-user guard, Zod validation, rate limiting
 ├── models/                       # User, Account, Transaction, Ledger, TokenBlacklist
 ├── routes/                       # Route definitions
@@ -200,6 +224,7 @@ src/
 └── docs/openapi.yaml             # OpenAPI 3 spec, served via /api-docs
 server.js                         # Entry point — startup, graceful shutdown
 Dockerfile / docker-compose.yml   # Containerized app (Atlas for MongoDB)
+.github/workflows/                # CI: lint, test, GHCR image publish
 ```
 
 ## Design decisions worth knowing about
@@ -208,21 +233,22 @@ Dockerfile / docker-compose.yml   # Containerized app (Atlas for MongoDB)
 - **Ledger entries are immutable.** `findOneAndUpdate`, `updateOne`, `deleteOne`, etc. are blocked at the schema level with pre-hooks that throw — corrections must be modeled as new, offsetting entries (the standard accounting pattern), not edits.
 - **`transferVersion` as a lock.** Incrementing this field inside the transaction forces MongoDB to serialize concurrent transfers from the same account, preventing two simultaneous transfers from both reading a stale balance.
 - **Idempotency keys are mandatory, not optional**, on every money-moving endpoint — this is how production payment APIs (Stripe included) prevent duplicate charges from client retries.
+- **Reversal as compensation, not deletion.** Following the same immutability principle as the rest of the ledger, reversing a transaction never touches the original record — it appends new entries that cancel it out, so the full history (including mistakes and corrections) is always visible.
 
 ## Roadmap
 
 **Completed**
-- [x] Automated tests (Jest/Supertest) covering the transfer flow, concurrency, idempotency, and rate limiting — 38 tests, run against a real Mongo replica set
+- [x] Automated tests (Jest/Supertest) covering the transfer flow, concurrency, idempotency, reversal, and rate limiting — run against a real Mongo replica set
 - [x] Paginated transaction history endpoint
 - [x] Rate limiting on auth and transfer endpoints (env-configurable, per-email/per-IP/per-user keyed, with isolated resettable stores for testing)
 - [x] Structured logging with Pino, including request correlation via `pino-http` and field-level redaction of secrets (passwords, tokens, cookies)
 - [x] OpenAPI 3 specification with interactive Swagger UI at `/api-docs`
 - [x] Liveness and readiness health checks (`/health/live`, `/health/ready`), with the readiness probe actually verifying the MongoDB connection
 - [x] Dockerfile + docker-compose for one-command local setup, running against MongoDB Atlas (a real replica set, satisfying the transaction requirement without extra config)
+- [x] Admin-authorized transaction reversal via compensating ledger entries
+- [x] CI pipeline — lint + test on every push, Docker image published to GHCR
 
 **Planned**
-- [ ] Transaction reversal endpoint (offsetting ledger entries)
-- [ ] CI pipeline (lint + test on every PR)
 - [ ] Deployed to production with a live URL
 - [ ] Prometheus metrics + Grafana dashboard
 
