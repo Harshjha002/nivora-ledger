@@ -1,5 +1,5 @@
 const rateLimit = require("express-rate-limit");
-const { MemoryStore } = require("express-rate-limit");
+const { MemoryStore, ipKeyGenerator } = require("express-rate-limit");
 
 const createRateLimiter = (options) => {
   return rateLimit(options);
@@ -43,7 +43,7 @@ const loginRateLimiter = createRateLimiter({
   keyGenerator: (req) =>
     typeof req.body?.email === "string" && req.body.email.length > 0
       ? req.body.email
-      : req.ip,
+      : ipKeyGenerator(req.ip),
 });
 
 const transactionRateLimiter = createRateLimiter({

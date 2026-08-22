@@ -103,10 +103,8 @@ Base URL: `/v1/api`
 |---|---|---|---|
 | GET | `/transaction` | Paginated transaction history (sent + received), optional `?accountId=` filter | Yes |
 | POST | `/transaction` | Transfer funds between two accounts | Yes + `Idempotency-Key` header, rate-limited |
-| POST | `/transaction/:id/reverse` | Reverse a completed transaction via compensating ledger entries | Yes (admin) |
+| POST | `/transaction/:transactionId/reverse` | Reverse a completed transaction via compensating ledger entries | Yes (admin) |
 | POST | `/transaction/system/initial-funds` | Seed an account with funds from the system account | Yes (system user) + `Idempotency-Key` header, rate-limited |
-
-> Update the reversal route path above to match your actual route file if it differs.
 
 ### Health
 
@@ -180,9 +178,7 @@ curl http://localhost:3000/health
 
 ## Testing
 
-> **TODO: confirm the current test count** (run `npm test` and update the number below — the previous README said 38, and a later commit improved coverage, so this number has likely changed).
-
-**[X] Jest/Supertest tests** across auth, account isolation, transfer correctness, reversal, rate limiting, and health checks — run against a real single-node MongoDB **replica set** (via `mongodb-memory-server`), not a standalone instance, so transactional code paths are actually exercised, not mocked around.
+**43 Jest/Supertest tests** across auth, account isolation, transfer correctness, reversal, rate limiting, and health checks — run against a real single-node MongoDB **replica set** (via `mongodb-memory-server`), not a standalone instance, so transactional code paths are actually exercised, not mocked around.
 
 ```bash
 npm install --save-dev jest supertest mongodb-memory-server
@@ -200,9 +196,6 @@ Notable cases:
 ## CI/CD
 
 GitHub Actions runs on every push: install → lint → test. On `main`, a Docker image is built and published to GitHub Container Registry (GHCR).
-
-> Add a build-status badge here once you have the workflow file name, e.g.
-> `![CI](https://github.com/Harshjha002/nivora-ledger/actions/workflows/<file>.yml/badge.svg)`
 
 ## Project structure
 
@@ -222,6 +215,7 @@ src/
 ├── dto/                          # Response shaping (transaction history)
 ├── validation/                   # Zod schemas
 └── docs/openapi.yaml             # OpenAPI 3 spec, served via /api-docs
+tests/                            # Jest/Supertest suite (auth, account, transaction, rate limits, health)
 server.js                         # Entry point — startup, graceful shutdown
 Dockerfile / docker-compose.yml   # Containerized app (Atlas for MongoDB)
 .github/workflows/                # CI: lint, test, GHCR image publish
@@ -238,7 +232,7 @@ Dockerfile / docker-compose.yml   # Containerized app (Atlas for MongoDB)
 ## Roadmap
 
 **Completed**
-- [x] Automated tests (Jest/Supertest) covering the transfer flow, concurrency, idempotency, reversal, and rate limiting — run against a real Mongo replica set
+- [x] Automated tests (Jest/Supertest) covering the transfer flow, concurrency, idempotency, reversal, and rate limiting — 43 tests, run against a real Mongo replica set
 - [x] Paginated transaction history endpoint
 - [x] Rate limiting on auth and transfer endpoints (env-configurable, per-email/per-IP/per-user keyed, with isolated resettable stores for testing)
 - [x] Structured logging with Pino, including request correlation via `pino-http` and field-level redaction of secrets (passwords, tokens, cookies)
@@ -251,6 +245,7 @@ Dockerfile / docker-compose.yml   # Containerized app (Atlas for MongoDB)
 **Planned**
 - [ ] Deployed to production with a live URL
 - [ ] Prometheus metrics + Grafana dashboard
+
 
 **Deliberately out of scope for this project**
 Redis, Kafka, and Elasticsearch are intentionally not part of this repo. A single-service ledger with a small, well-understood event surface (one email notification) doesn't provide a genuine justification for a message broker or a search index — adding them here would be resume-keyword engineering rather than solving a real problem this system has. They're reserved for a separate, dedicated microservices project where multi-consumer event fan-out and full-text search are actual product requirements.
