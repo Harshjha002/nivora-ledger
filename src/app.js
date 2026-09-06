@@ -2,8 +2,10 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const helmet = require("helmet");
-const swaggerUi = require("swagger-ui-express");
+
+const swaggerUiDist = require("swagger-ui-dist");
 const swaggerSpec = require("./config/swagger");
+
 const pinoHttp = require("pino-http");
 const logger = require("./config/logger");
 const mongoose = require("mongoose");
@@ -94,7 +96,52 @@ app.get("/health", (req, res) => {
 app.use("/v1/api/auth", authRouter);
 app.use("/v1/api/account", accountRouter);
 app.use("/v1/api/transaction", transactionRoutes);
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get(["/api-docs", "/api-docs/"], (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Nivora Ledger API Docs</title>
+
+        <link
+          rel="stylesheet"
+          href="/api-docs/swagger-ui.css"
+        />
+      </head>
+
+      <body>
+        <div id="swagger-ui"></div>
+
+        <script src="/api-docs/swagger-ui-bundle.js"></script>
+        <script src="/api-docs/swagger-ui-standalone-preset.js"></script>
+
+        <script>
+          window.onload = () => {
+            window.ui = SwaggerUIBundle({
+              spec: ${JSON.stringify(swaggerSpec)},
+              dom_id: "#swagger-ui",
+              deepLinking: true,
+              presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIStandalonePreset
+              ],
+              layout: "StandaloneLayout"
+            });
+          };
+        </script>
+      </body>
+    </html>
+  `);
+});
+
+app.use(
+  "/api-docs",
+  express.static(swaggerUiDist.getAbsoluteFSPath(), {
+    index: false
+  })
+);
 
 app.use((req, res) => {
   return res.status(404).json({
