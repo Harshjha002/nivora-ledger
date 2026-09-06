@@ -1,10 +1,6 @@
 const requiredEnv = [
     "MONGO_URI",
     "JWT_SECRET",
-    "CLIENT_ID",
-    "CLIENT_SECRET",
-    "REFRESH_TOKEN",
-    "EMAIL_USER",
     "CLIENT_URL",
 ];
 
@@ -49,6 +45,13 @@ if (!allowedLogLevels.includes(logLevel)) {
     );
 }
 
+const emailConfigured = Boolean(
+    process.env.CLIENT_ID &&
+    process.env.CLIENT_SECRET &&
+    process.env.REFRESH_TOKEN &&
+    process.env.EMAIL_USER
+);
+
 const env = {
     NODE_ENV: nodeEnv,
     PORT: Number(process.env.PORT) || 3000,
@@ -56,10 +59,11 @@ const env = {
     MONGO_URI: process.env.MONGO_URI,
     JWT_SECRET: process.env.JWT_SECRET,
 
-    CLIENT_ID: process.env.CLIENT_ID,
-    CLIENT_SECRET: process.env.CLIENT_SECRET,
-    REFRESH_TOKEN: process.env.REFRESH_TOKEN,
-    EMAIL_USER: process.env.EMAIL_USER,
+    CLIENT_ID: process.env.CLIENT_ID || null,
+    CLIENT_SECRET: process.env.CLIENT_SECRET || null,
+    REFRESH_TOKEN: process.env.REFRESH_TOKEN || null,
+    EMAIL_USER: process.env.EMAIL_USER || null,
+    EMAIL_CONFIGURED: emailConfigured,
 
     CLIENT_URL: process.env.CLIENT_URL,
 
