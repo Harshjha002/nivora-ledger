@@ -24,7 +24,12 @@ module.exports = [
       "no-console": "warn", // logging should go through Pino, not console
     },
   },
-  {
-    ignores: ["node_modules/**", "coverage/**", "dist/**"],
-  },
+ {
+  ignores: [
+    "node_modules/**",
+    "coverage/**",
+    "dist/**",
+    "public/swagger-ui/**",
+  ],
+},
 ];
