@@ -3,7 +3,6 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const helmet = require("helmet");
 const path = require("path");
-const swaggerUiDist = require("swagger-ui-dist");
 const swaggerSpec = require("./config/swagger");
 const pinoHttp = require("pino-http");
 const logger = require("./config/logger");
@@ -14,6 +13,10 @@ const transactionRoutes = require("./routes/transaction.route");
 const errorMiddleware = require("./middleware/error.middleware");
 
 const app = express();
+
+/*
+ * Logging
+ */
 
 app.use(
     pinoHttp({
@@ -36,8 +39,16 @@ app.use(
     })
 );
 
+/*
+ * Body parsing
+ */
+
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
+
+/*
+ * Security
+ */
 
 app.use(
     helmet({
@@ -52,12 +63,20 @@ app.use(
     })
 );
 
+/*
+ * CORS
+ */
+
 app.use(
     cors({
         origin: process.env.CLIENT_URL,
         credentials: true,
-    }),
+    })
 );
+
+/*
+ * Health checks
+ */
 
 app.get("/health/live", (req, res) => {
     return res.status(200).json({
@@ -90,6 +109,10 @@ app.get("/health", (req, res) => {
     });
 });
 
+/*
+ * API routes
+ */
+
 app.use("/v1/api/auth", authRouter);
 app.use("/v1/api/account", accountRouter);
 app.use("/v1/api/transaction", transactionRoutes);
@@ -98,18 +121,18 @@ app.use("/v1/api/transaction", transactionRoutes);
  * Swagger UI
  */
 
-const swaggerDistPath = swaggerUiDist.getAbsoluteFSPath();
-
 app.get(["/api-docs", "/api-docs/"], (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
             <head>
                 <meta charset="UTF-8" />
+
                 <meta
                     name="viewport"
                     content="width=device-width, initial-scale=1.0"
                 />
+
                 <title>Nivora Ledger API Docs</title>
 
                 <link
@@ -122,6 +145,7 @@ app.get(["/api-docs", "/api-docs/"], (req, res) => {
                 <div id="swagger-ui"></div>
 
                 <script src="/api-docs/swagger-ui-bundle.js"></script>
+
                 <script src="/api-docs/swagger-ui-standalone-preset.js"></script>
 
                 <script>
@@ -144,44 +168,22 @@ app.get(["/api-docs", "/api-docs/"], (req, res) => {
 });
 
 /*
- * Serve Swagger assets with explicit MIME types
+ * Serve Swagger UI static assets
  */
 
-app.get("/api-docs/swagger-ui.css", (req, res) => {
-    res.setHeader(
-        "Content-Type",
-        "text/css; charset=utf-8"
-    );
+app.use(
+    "/api-docs",
+    express.static(
+        path.join(__dirname, "../public/swagger-ui"),
+        {
+            index: false,
+        }
+    )
+);
 
-    return res.sendFile(
-        path.join(swaggerDistPath, "swagger-ui.css")
-    );
-});
-
-app.get("/api-docs/swagger-ui-bundle.js", (req, res) => {
-    res.setHeader(
-        "Content-Type",
-        "application/javascript; charset=utf-8"
-    );
-
-    return res.sendFile(
-        path.join(swaggerDistPath, "swagger-ui-bundle.js")
-    );
-});
-
-app.get("/api-docs/swagger-ui-standalone-preset.js", (req, res) => {
-    res.setHeader(
-        "Content-Type",
-        "application/javascript; charset=utf-8"
-    );
-
-    return res.sendFile(
-        path.join(
-            swaggerDistPath,
-            "swagger-ui-standalone-preset.js"
-        )
-    );
-});
+/*
+ * 404 Handler
+ */
 
 app.use((req, res) => {
     return res.status(404).json({
@@ -189,6 +191,10 @@ app.use((req, res) => {
         message: "Route not found",
     });
 });
+
+/*
+ * Error Handler
+ */
 
 app.use(errorMiddleware);
 
