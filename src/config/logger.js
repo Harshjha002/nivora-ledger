@@ -1,7 +1,9 @@
 const pino = require("pino");
 const env = require("./env");
 
-const isDevelopment = env.NODE_ENV !== "production";
+
+const usePrettyLogs =
+    env.NODE_ENV === "development" && process.env.VERCEL !== "1";
 
 const logger = pino({
     level: env.LOG_LEVEL,
@@ -18,7 +20,7 @@ const logger = pino({
         remove: true,
     },
 
-    transport: isDevelopment
+    transport: usePrettyLogs
         ? {
               target: "pino-pretty",
               options: {
